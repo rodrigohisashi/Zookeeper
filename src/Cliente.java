@@ -1,12 +1,8 @@
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
-import java.util.Scanner;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,6 +14,7 @@ public class Cliente {
     private static List<String> serverIPs = new ArrayList<>();
     private static List<Integer> serverPorts = new ArrayList<>();
 
+    private static Map<String, Long> ultimoTimestamps = new HashMap<>();
     public static final String TRY_OTHER_SERVER_OR_LATER = "TRY_OTHER_SERVER_OR_LATER";
 
     public void iniciar() {
@@ -35,36 +32,46 @@ public class Cliente {
         Scanner scanner = new Scanner(System.in);
         Random random = new Random();
 
-        System.out.println("\nEscolha uma opção válida:");
-        System.out.println("1. Requisição PUT");
-        System.out.println("2. Requisição GET");
-        System.out.println("3. Sair");
+        while (true) {
+            System.out.println("\nEscolha uma opção válida:");
+            System.out.println("1. Requisição PUT");
+            System.out.println("2. Requisição GET");
+            System.out.println("3. Sair");
 
-        System.out.print("Escolha uma opção: ");
-        int escolha = Integer.parseInt(scanner.nextLine());
+            System.out.print("Escolha uma opção: ");
+            int escolha;
+            try {
+                escolha = Integer.parseInt(scanner.nextLine());
+            } catch (NumberFormatException e) {
+                System.out.println("Digite um número válido.");
+                continue;
+            }
+            switch (escolha) {
+                case 1:
+                    System.out.print("Digite a chave: ");
+                    String chavePut = scanner.nextLine();
 
-        switch (escolha) {
-            case 1:
-                System.out.print("Digite a chave: ");
-                String chavePut = scanner.nextLine();
+                    System.out.print("Digite o valor: ");
+                    String valorPut = scanner.nextLine();
 
-                System.out.print("Digite o valor: ");
-                String valorPut = scanner.nextLine();
+                    int indiceServidorPut = random.nextInt(serverIPs.size());
+                    enviarPut(chavePut, valorPut, serverIPs.get(indiceServidorPut), serverPorts.get(indiceServidorPut), executorService);
+                    break;
+                case 2:
+                    System.out.print("Digite a chave: ");
+                    String chaveGet = scanner.nextLine();
 
-                int indiceServidorPut = random.nextInt(serverIPs.size());
-                enviarPut(chavePut, valorPut, serverIPs.get(indiceServidorPut), serverPorts.get(indiceServidorPut), executorService);
-                break;
-            case 2:
-                System.out.print("Digite a chave: ");
-                String chaveGet = scanner.nextLine();
-
-                int indiceServidorGet = random.nextInt(serverIPs.size());
-                enviarGet(chaveGet, serverIPs.get(indiceServidorGet), serverPorts.get(indiceServidorGet), executorService);
-                break;
-            case 3:
-                System.exit(0);
+                    int indiceServidorGet = random.nextInt(serverIPs.size());
+                    enviarGet(chaveGet, serverIPs.get(indiceServidorGet), serverPorts.get(indiceServidorGet), executorService);
+                    break;
+                case 3:
+                    System.exit(0);
+                default:
+                    System.out.println("Opção inválida. Digite um número válido.");
+            }
         }
     }
+
 
     private void preencherInfoServidores() {
         Scanner scanner = new Scanner(System.in);
@@ -140,8 +147,11 @@ public class Cliente {
                 ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
                 ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
 
+                // Obter o último timestamp associado à chave (se existir no mapa)
+                long ultimoTimestamp = ultimoTimestamps.getOrDefault(chave, 0L);
+
                 // Prepara a mensagem de GET e envia
-                Mensagem mensagem = new Mensagem("GET", chave, null, 0L, montarRemetenteCliente(clienteSocket));
+                Mensagem mensagem = new Mensagem("GET", chave, null, ultimoTimestamp, montarRemetenteCliente(clienteSocket));
                 out.writeObject(mensagem);
 
                 // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
@@ -172,8 +182,9 @@ public class Cliente {
         Cliente cliente = new Cliente();
         cliente.iniciar();
     }
+
     private static class ReceberMensagensThread implements Runnable {
-        private Socket clienteSocket;
+        private final Socket clienteSocket;
 
         public ReceberMensagensThread(Socket clienteSocket) {
             this.clienteSocket = clienteSocket;
@@ -188,11 +199,12 @@ public class Cliente {
                     // Ler a mensagem do servidor
                     Mensagem mensagem = (Mensagem) in.readObject();
 
-                    // Tratar a mensagem recebida, por exemplo:
+                    // Tratar a mensagem recebida, por exemplo e setar o ultimo time stamp associado essa chave:
                     if (mensagem.getMetodo().equals("PUT_OK")) {
                         System.out.println();
                         System.out.println("PUT realizado com sucesso. Timestamp: " + mensagem.getTimestamp());
                         System.out.println();
+                        ultimoTimestamps.put(mensagem.getChave(), mensagem.getTimestamp());
                     }
                 }
             } catch (IOException | ClassNotFoundException e) {

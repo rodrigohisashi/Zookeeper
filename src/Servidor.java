@@ -76,7 +76,7 @@ public class Servidor {
                 ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
 
                 System.out.println("MANDANDO PARA O CLIENTE" + clienteSocket);
-                Mensagem mensagemPutOk = new Mensagem("PUT_OK", mensagem.getChave(), null, mensagem.getTimestamp(), montarEnderecoServidor());
+                Mensagem mensagemPutOk = new Mensagem("PUT_OK", mensagem.getChave(), mensagem.getValor(), System.currentTimeMillis(), montarEnderecoServidor());
                 out.writeObject(mensagemPutOk);
 //                clienteSocket.close();
             } catch (IOException e) {
@@ -182,7 +182,7 @@ public class Servidor {
                 Mensagem mensagemArmazenada = servidor.tabela.get(key);
                 valueTimestamp = mensagemArmazenada.getTimestamp();
 
-                if (valueTimestamp >= timestamp) {
+                if (valueTimestamp <= timestamp) {
                     value = mensagemArmazenada.getValor();
                 } else {
                     value = TRY_OTHER_SERVER_OR_LATER;
