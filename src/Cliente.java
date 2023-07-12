@@ -1,6 +1,7 @@
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.Serializable;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,8 +51,7 @@ public class Cliente {
                 System.out.print("Digite o valor: ");
                 String valorPut = scanner.nextLine();
 
-                //     int indiceServidorPut = random.nextInt(serverIPs.size());
-                int indiceServidorPut = 1;
+                int indiceServidorPut = random.nextInt(serverIPs.size());
                 enviarPut(chavePut, valorPut, serverIPs.get(indiceServidorPut), serverPorts.get(indiceServidorPut), executorService);
                 break;
             case 2:
@@ -103,16 +103,17 @@ public class Cliente {
                 Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, montarRemetenteCliente(clienteSocket));
                 out.writeObject(mensagem);
 
-                Mensagem resposta = (Mensagem) in.readObject();
-                System.out.println(resposta);
+                // Cria uma nova thread para receber mensagens do servidor
+                ReceberMensagensThread receberMensagensThread = new ReceberMensagensThread(clienteSocket);
+                Thread thread = new Thread(receberMensagensThread);
+                thread.start();
 
-
-                clienteSocket.close();
+                thread.join();
                 return null;
             } catch (IOException e) {
                 e.printStackTrace();
                 return null;
-            } catch (ClassNotFoundException e) {
+            } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
         }, executorService);
@@ -171,6 +172,33 @@ public class Cliente {
         Cliente cliente = new Cliente();
         cliente.iniciar();
     }
+    private static class ReceberMensagensThread implements Runnable {
+        private Socket clienteSocket;
 
+        public ReceberMensagensThread(Socket clienteSocket) {
+            this.clienteSocket = clienteSocket;
+        }
+
+        @Override
+        public void run() {
+            try {
+                ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
+
+                while (!clienteSocket.isClosed()) {
+                    // Ler a mensagem do servidor
+                    Mensagem mensagem = (Mensagem) in.readObject();
+
+                    // Tratar a mensagem recebida, por exemplo:
+                    if (mensagem.getMetodo().equals("PUT_OK")) {
+                        System.out.println();
+                        System.out.println("PUT realizado com sucesso. Timestamp: " + mensagem.getTimestamp());
+                        System.out.println();
+                    }
+                }
+            } catch (IOException | ClassNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 
 }
