@@ -100,21 +100,26 @@ public class Cliente {
                 ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
 
                 // Prepara a mensagem de PUT e envia
-                Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, "cliente123");
+                Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, montarRemetenteCliente(clienteSocket));
                 out.writeObject(mensagem);
 
-                // Cria uma nova thread para receber mensagens do servidor
-                ReceberMensagensThread receberMensagensThread = new ReceberMensagensThread(clienteSocket);
-                Thread thread = new Thread(receberMensagensThread);
-                thread.start();
+                Mensagem resposta = (Mensagem) in.readObject();
+                System.out.println(resposta);
+
 
                 clienteSocket.close();
                 return null;
             } catch (IOException e) {
                 e.printStackTrace();
                 return null;
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException(e);
             }
         }, executorService);
+    }
+
+    private static String montarRemetenteCliente(Socket clienteSocket) {
+        return clienteSocket.getInetAddress().getHostAddress() + ":" + clienteSocket.getPort();
     }
 
     /**
@@ -135,7 +140,7 @@ public class Cliente {
                 ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
 
                 // Prepara a mensagem de GET e envia
-                Mensagem mensagem = new Mensagem("GET", chave, null, 0L, "cliente");
+                Mensagem mensagem = new Mensagem("GET", chave, null, 0L, montarRemetenteCliente(clienteSocket));
                 out.writeObject(mensagem);
 
                 // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
@@ -167,30 +172,5 @@ public class Cliente {
         cliente.iniciar();
     }
 
-    private static class ReceberMensagensThread implements Runnable {
-        private Socket clienteSocket;
 
-        public ReceberMensagensThread(Socket clienteSocket) {
-            this.clienteSocket = clienteSocket;
-        }
-
-        @Override
-        public void run() {
-            try {
-                ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
-
-                while (true) {
-                    // Ler a mensagem do servidor
-                    Mensagem mensagem = (Mensagem) in.readObject();
-
-                    // Tratar a mensagem recebida, por exemplo:
-                    if (mensagem.getMetodo().equals("PUT_OK")) {
-                        System.out.println("PUT realizado com sucesso. Timestamp: " + mensagem.getTimestamp());
-                    }
-                }
-            } catch (IOException | ClassNotFoundException e) {
-                e.printStackTrace();
-            }
-        }
-    }
 }

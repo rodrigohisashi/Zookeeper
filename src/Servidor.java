@@ -18,7 +18,6 @@ public class Servidor {
     private int portaLider;
     private Boolean ehLider;
     private List<Integer> portasServidores;
-    private Map<String, Socket> clientes = new HashMap<>();  // Mapa para armazenar os sockets dos clientes
     private Map<String, Mensagem> tabela = new HashMap<>();
 
     public Servidor(String ip, int porta, String ipLider, int portaLider, List<Integer> portasServidores) {
@@ -56,47 +55,12 @@ public class Servidor {
     }
 
 
-    private synchronized void inserirMensagem(String key, String value, long timestamp, String remetente) {
-        tabela.put(key, new Mensagem("PUT", key, value, timestamp, remetente));
-    }
-
-    private synchronized void replicarRegistro(String key, String value, long timestamp) {
-        Mensagem mensagemReplicacao = new Mensagem("REPLICATION", key, value, timestamp, montarEnderecoServidor());
-
-        for (int portaServidor : portasServidores) {
-            try {
-                Socket servidorSocket = new Socket(SERVER_IP_DEFAULT_LOCAL, portaServidor);
-                ObjectOutputStream out = new ObjectOutputStream(servidorSocket.getOutputStream());
-                out.writeObject(mensagemReplicacao);
-                servidorSocket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    public synchronized void registrarCliente(String remetente, Socket clienteSocket) {
-        clientes.put(remetente, clienteSocket);
-    }
-
-    private synchronized void encaminharParaLider(Mensagem mensagem) {
-        try {
-            Socket liderSocket = new Socket(ipLider, portaLider);
-            ObjectOutputStream out = new ObjectOutputStream(liderSocket.getOutputStream());
-            out.writeObject(mensagem);
-            liderSocket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-
     private String montarEnderecoServidor() {
         return ip + ":" + porta;
     }
 
     public synchronized void processarReplicationOK(Mensagem mensagem) {
-        // Verificar se ja nao foi contado que ele recebeu essa mensagem desse mesmo remetente, se nao, adicionar como remetente
+        // Verificar se ja  foi contado que ele recebeu essa mensagem desse mesmo remetente, se nao, adicionar como remetente
         if (!mensagem.getReplicationStatus().contains(mensagem.getRemetente())) {
             mensagem.getReplicationStatus().add(mensagem.getRemetente());
         }
@@ -105,23 +69,25 @@ public class Servidor {
         if (mensagem.getReplicationStatus().size() == NUMERO_SERVIDORES_EXCETO_LIDER) {
             // Obter o IP e a porta do remetente
             String remetente = mensagem.getRemetente();
+            String ip = remetente.split(":")[0];
+            int porta = Integer.parseInt(remetente.split(":")[1]);
 
             // Enviar a mensagem PUT_OK para o cliente remetente
-            Socket clienteSocket = clientes.get(remetente);
-            if (clienteSocket != null) {
+            try {
+                Socket clienteSocket = new Socket(ip, porta);
+                ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
                 Mensagem mensagemPutOk = new Mensagem("PUT_OK", mensagem.getChave(), null, mensagem.getTimestamp(), montarEnderecoServidor());
-                try {
-                    ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
-                    out.writeObject(mensagemPutOk);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                out.writeObject(mensagemPutOk);
+                clienteSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }
     }
 
     /**
      * Método para inserir porta do servidor - Verifica se a porta digitada já está em uso
+     *
      * @param scanner scanner para pegar teclado
      * @return a porta do servidor criado
      */
@@ -184,25 +150,25 @@ public class Servidor {
                         if (servidor.getEhLider()) {
                             inserirMensagem(key, value, timestamp, remetente);
                             replicarRegistro(key, value, timestamp);
-                            registrarCliente(remetente, clienteSocket);
                         } else {
                             encaminharParaLider(mensagem);
                         }
                         break;
                     case "GET":
                         requisicaoGET(out, key, value, timestamp);
+                        clienteSocket.close();
                         break;
                     case "REPLICATION":
                         inserirMensagem(key, value, timestamp, remetente);
-                        Mensagem mensagemOK = new Mensagem("REPLICATION_OK", null, null, System.currentTimeMillis(), montarEnderecoServidor());
+                        Mensagem mensagemOK = new Mensagem("REPLICATION_OK", "SERVIDOR", ip+porta, System.currentTimeMillis(), remetente);
                         encaminharParaLider(mensagemOK);
                         break;
                     case "REPLICATION_OK":
                         processarReplicationOK(mensagem);
+                        clienteSocket.close();
                         break;
                 }
 
-                clienteSocket.close();
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
@@ -224,12 +190,42 @@ public class Servidor {
             Mensagem resposta = new Mensagem("GET_RESPONSE", key, value, valueTimestamp, servidor.montarEnderecoServidor());
             out.writeObject(resposta);
         }
+
+        private void inserirMensagem(String key, String value, long timestamp, String remetente) {
+            tabela.put(key, new Mensagem("PUT", key, value, timestamp, remetente));
+        }
+
+        private void replicarRegistro(String key, String value, long timestamp) {
+            Mensagem mensagemReplicacao = new Mensagem("REPLICATION", key, value, timestamp, montarEnderecoServidor());
+
+            for (int portaServidor : portasServidores) {
+                try {
+                    Socket servidorSocket = new Socket(SERVER_IP_DEFAULT_LOCAL, portaServidor);
+                    ObjectOutputStream out = new ObjectOutputStream(servidorSocket.getOutputStream());
+                    out.writeObject(mensagemReplicacao);
+                    servidorSocket.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+
+        private void encaminharParaLider(Mensagem mensagem) {
+            try {
+                Socket liderSocket = new Socket(ipLider, portaLider);
+                ObjectOutputStream out = new ObjectOutputStream(liderSocket.getOutputStream());
+                out.writeObject(mensagem);
+                liderSocket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public static void main(String[] args) {
         List<Integer> portas = new ArrayList<>();
         portas.add(10097);
-        portas.add(10098);
         portas.add(10099);
 
         Scanner scanner = new Scanner(System.in);
