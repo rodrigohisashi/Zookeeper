@@ -27,7 +27,7 @@ public class Cliente {
 
     private static void menuInterativo() {
 
-        ExecutorService executorService = Executors.newFixedThreadPool(10);
+        ExecutorService executorService = Executors.newFixedThreadPool(3);
 
         Scanner scanner = new Scanner(System.in);
         Random random = new Random();
@@ -110,17 +110,16 @@ public class Cliente {
                 Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, montarRemetenteCliente(clienteSocket));
                 out.writeObject(mensagem);
 
-                // Cria uma nova thread para receber mensagens do servidor
-                ReceberMensagensThread receberMensagensThread = new ReceberMensagensThread(clienteSocket);
-                Thread thread = new Thread(receberMensagensThread);
-                thread.start();
-
-                thread.join();
+                // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
+                Mensagem resposta = (Mensagem) in.readObject();
+                if (resposta.getMetodo().equals("PUT_OK")) {
+                    System.out.println("AAAAAAAAAAAAAAAAAAA");
+                }
                 return null;
             } catch (IOException e) {
                 e.printStackTrace();
                 return null;
-            } catch (InterruptedException e) {
+            } catch (ClassNotFoundException e) {
                 throw new RuntimeException(e);
             }
         }, executorService);
@@ -184,7 +183,7 @@ public class Cliente {
     }
 
     private static class ReceberMensagensThread implements Runnable {
-        private final Socket clienteSocket;
+        private Socket clienteSocket;
 
         public ReceberMensagensThread(Socket clienteSocket) {
             this.clienteSocket = clienteSocket;
@@ -195,22 +194,25 @@ public class Cliente {
             try {
                 ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
 
-                while (!clienteSocket.isClosed()) {
-                    // Ler a mensagem do servidor
-                    Mensagem mensagem = (Mensagem) in.readObject();
+                while (true) {
+                    // Verificar se há dados disponíveis para leitura
+                    if (in.available() > 0) {
+                        Mensagem mensagem = (Mensagem) in.readObject();
 
-                    // Tratar a mensagem recebida, por exemplo e setar o ultimo time stamp associado essa chave:
-                    if (mensagem.getMetodo().equals("PUT_OK")) {
-                        System.out.println();
-                        System.out.println("PUT realizado com sucesso. Timestamp: " + mensagem.getTimestamp());
-                        System.out.println();
-                        ultimoTimestamps.put(mensagem.getChave(), mensagem.getTimestamp());
+                        if (mensagem.getMetodo().equals("PUT_OK")) {
+                            System.out.println("PUT realizado com sucesso. Timestamp: " + mensagem.getTimestamp());
+                            clienteSocket.close();
+                            break;  // Encerra o loop após receber o PUT_OK
+                        }
+                    } else {
+                        // Aguardar um curto período de tempo antes de verificar novamente
+                        Thread.sleep(1000);
                     }
                 }
-            } catch (IOException | ClassNotFoundException e) {
+            } catch (IOException | ClassNotFoundException | InterruptedException e) {
                 e.printStackTrace();
             }
         }
-    }
 
+    }
 }
