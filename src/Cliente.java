@@ -3,9 +3,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class Cliente {
 
@@ -19,15 +17,14 @@ public class Cliente {
 
     public void iniciar() {
         preencherInfoServidores();
-
+        Thread thread1 = new Thread();
+        Thread thread2 = new Thread();
         while (true) {
-            menuInterativo();
+            menuInterativo(thread1, thread2);
         }
     }
 
-    private static void menuInterativo() {
-
-        ExecutorService executorService = Executors.newFixedThreadPool(3);
+    private static void menuInterativo(Thread thread1, Thread thread2) {
 
         Scanner scanner = new Scanner(System.in);
         Random random = new Random();
@@ -55,14 +52,16 @@ public class Cliente {
                     String valorPut = scanner.nextLine();
 
                     int indiceServidorPut = random.nextInt(serverIPs.size());
-                    enviarPut(chavePut, valorPut, serverIPs.get(indiceServidorPut), serverPorts.get(indiceServidorPut), executorService);
+                    thread1 = new Thread(() -> enviarPut(chavePut, valorPut, serverIPs.get(indiceServidorPut), serverPorts.get(indiceServidorPut)));
+                    thread1.start();
                     break;
                 case 2:
                     System.out.print("Digite a chave: ");
                     String chaveGet = scanner.nextLine();
 
                     int indiceServidorGet = random.nextInt(serverIPs.size());
-                    enviarGet(chaveGet, serverIPs.get(indiceServidorGet), serverPorts.get(indiceServidorGet), executorService);
+                    thread2 = new Thread(() -> enviarGet(chaveGet, serverIPs.get(indiceServidorGet), serverPorts.get(indiceServidorGet)));
+                    thread2.start();
                     break;
                 case 3:
                     System.exit(0);
@@ -95,34 +94,30 @@ public class Cliente {
      * @param valor           para ser preenchido
      * @param serverIP        servidor para ser enviado
      * @param serverPorta     server porta para ser enviado
-     * @param executorService service para tarefas assincronas
      */
-    private static void enviarPut(String chave, String valor, String serverIP, int serverPorta, ExecutorService executorService) {
-        // Utiliza a classe CompletableFuture para fazer requisicao assincrona
-        CompletableFuture<Mensagem> future = CompletableFuture.supplyAsync(() -> {
-            try {
-                // Inicia o socket para comunicacao com  o servidor escolhido
-                Socket clienteSocket = new Socket(serverIP, serverPorta);
-                ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
-                ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
+    private static void enviarPut(String chave, String valor, String serverIP, int serverPorta) {
 
-                // Prepara a mensagem de PUT e envia
-                Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, montarRemetenteCliente(clienteSocket));
-                out.writeObject(mensagem);
+        try {
+            // Inicia o socket para comunicacao com  o servidor escolhido
+            Socket clienteSocket = new Socket(serverIP, serverPorta);
+            ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
 
-                // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
-                Mensagem resposta = (Mensagem) in.readObject();
-                if (resposta.getMetodo().equals("PUT_OK")) {
-                    System.out.println("AAAAAAAAAAAAAAAAAAA");
-                }
-                return null;
-            } catch (IOException e) {
-                e.printStackTrace();
-                return null;
-            } catch (ClassNotFoundException e) {
-                throw new RuntimeException(e);
+            // Prepara a mensagem de PUT e envia
+            Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, montarRemetenteCliente(clienteSocket));
+            out.writeObject(mensagem);
+
+            Mensagem resposta = (Mensagem) in.readObject();
+            if (resposta.getMetodo().equals("PUT_OK")) {
+                System.out.println("DKASDJKAS");
             }
-        }, executorService);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     private static String montarRemetenteCliente(Socket clienteSocket) {
@@ -135,46 +130,38 @@ public class Cliente {
      * @param chave           chave a ser enviado para procura
      * @param serverIP        ip do server para ser enviado
      * @param serverPorta     a porta do server
-     * @param executorService service das threads para paralelização
      */
-    private static void enviarGet(String chave, String serverIP, int serverPorta, ExecutorService executorService) {
-        // Utiliza a classe CompletableFuture para fazer requisicao assincrona
-        CompletableFuture<Mensagem> future = CompletableFuture.supplyAsync(() -> {
-            try {
-                // Inicia o socket para comunicacao com  o servidor escolhido
-                Socket clienteSocket = new Socket(serverIP, serverPorta);
-                ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
-                ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
+    private static void enviarGet(String chave, String serverIP, int serverPorta) {
+        try {
+            // Inicia o socket para comunicacao com  o servidor escolhido
+            Socket clienteSocket = new Socket(serverIP, serverPorta);
+            ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
+            ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
 
-                // Obter o último timestamp associado à chave (se existir no mapa)
-                long ultimoTimestamp = ultimoTimestamps.getOrDefault(chave, 0L);
+            // Obter o último timestamp associado à chave (se existir no mapa)
+            long ultimoTimestamp = ultimoTimestamps.getOrDefault(chave, 0L);
 
-                // Prepara a mensagem de GET e envia
-                Mensagem mensagem = new Mensagem("GET", chave, null, ultimoTimestamp, montarRemetenteCliente(clienteSocket));
-                out.writeObject(mensagem);
+            // Prepara a mensagem de GET e envia
+            Mensagem mensagem = new Mensagem("GET", chave, null, ultimoTimestamp, montarRemetenteCliente(clienteSocket));
+            out.writeObject(mensagem);
 
-                // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
-                Mensagem resposta = (Mensagem) in.readObject();
-                if (resposta.getMetodo().equals("GET_RESPONSE")) {
-                    if (resposta.getValor() != null) {
-                        System.out.println("Valor encontrado: " + resposta.getValor() + ", Timestamp: " + resposta.getTimestamp());
-                    } else if (resposta.getValor() == null) {
-                        System.out.println("Chave " + chave + " não foi encontrada");
-                    } else if (resposta.getValor().equals(TRY_OTHER_SERVER_OR_LATER)) {
-                        System.out.println("Tente outro server ou mais tarde");
-                    }
+            // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
+            Mensagem resposta = (Mensagem) in.readObject();
+            if (resposta.getMetodo().equals("GET_RESPONSE")) {
+                if (resposta.getValor() != null) {
+                    System.out.println("Valor encontrado: " + resposta.getValor() + ", Timestamp: " + resposta.getTimestamp());
+                } else if (resposta.getValor() == null) {
+                    System.out.println("Chave " + chave + " não foi encontrada");
+                } else if (resposta.getValor().equals(TRY_OTHER_SERVER_OR_LATER)) {
+                    System.out.println("Tente outro server ou mais tarde");
                 }
-
-                // Fecha o socket e retorna a resposta
-                clienteSocket.close();
-                return resposta;
-            } catch (IOException | ClassNotFoundException e) {
-                e.printStackTrace();
-                return null;
             }
-        }, executorService);
-        // bloquear a execução até que o resultado esteja disponível.
-        future.join();
+
+            // Fecha o socket e retorna a resposta
+            clienteSocket.close();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
     }
 
     public static void main(String[] args) {
@@ -182,37 +169,4 @@ public class Cliente {
         cliente.iniciar();
     }
 
-    private static class ReceberMensagensThread implements Runnable {
-        private Socket clienteSocket;
-
-        public ReceberMensagensThread(Socket clienteSocket) {
-            this.clienteSocket = clienteSocket;
-        }
-
-        @Override
-        public void run() {
-            try {
-                ObjectInputStream in = new ObjectInputStream(clienteSocket.getInputStream());
-
-                while (true) {
-                    // Verificar se há dados disponíveis para leitura
-                    if (in.available() > 0) {
-                        Mensagem mensagem = (Mensagem) in.readObject();
-
-                        if (mensagem.getMetodo().equals("PUT_OK")) {
-                            System.out.println("PUT realizado com sucesso. Timestamp: " + mensagem.getTimestamp());
-                            clienteSocket.close();
-                            break;  // Encerra o loop após receber o PUT_OK
-                        }
-                    } else {
-                        // Aguardar um curto período de tempo antes de verificar novamente
-                        Thread.sleep(1000);
-                    }
-                }
-            } catch (IOException | ClassNotFoundException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-
-    }
 }

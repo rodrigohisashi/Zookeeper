@@ -10,6 +10,8 @@ public class Mensagem implements Serializable {
     private List<String> replicationStatus = new ArrayList<>();
     private String remetente;
 
+
+
     public Mensagem(String metodo, String chave, String valor, Long timestamp, String remetente) {
         this.metodo = metodo;
         this.chave = chave;

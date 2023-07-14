@@ -1,15 +1,11 @@
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class Servidor {
-    public static final int NUMERO_SERVIDORES_EXCETO_LIDER = 2;
 
     public static final String SERVER_IP_DEFAULT_LOCAL = "127.0.0.1";
     public static final String TRY_OTHER_SERVER_OR_LATER = "TRY_OTHER_SERVER_OR_LATER";
@@ -20,7 +16,6 @@ public class Servidor {
     private Boolean ehLider;
     private List<Integer> portasServidores;
     private Map<String, Mensagem> tabela = new HashMap<>();
-    private Map<String, Socket> tabelaSockets = new HashMap<>();
     public Servidor(String ip, int porta, String ipLider, int portaLider, List<Integer> portasServidores) {
         this.ip = ip;
         this.porta = porta;
@@ -42,13 +37,13 @@ public class Servidor {
         try {
             ServerSocket servidorSocket = new ServerSocket(porta);
 
-            // Criar pool de threads para varias conexoes
-            ExecutorService executorService = Executors.newCachedThreadPool();
-
             // Espera conexao dos clientes
             while (true) {
                 Socket clienteSocket = servidorSocket.accept();
-                executorService.execute(new ClienteHandler(clienteSocket, this));
+                ClienteHandler clienteHandler = new ClienteHandler(clienteSocket, this);
+                Thread thread1 = new Thread(clienteHandler);
+                thread1.start();
+
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -58,33 +53,6 @@ public class Servidor {
 
     private String montarEnderecoServidor() {
         return ip + ":" + porta;
-    }
-
-    public synchronized void processarReplicationOK(Mensagem mensagem) {
-        // Verificar se ja  foi contado que ele recebeu essa OK dos outros servidores, se nao, adicionar 1 ok na lista de replicationStatus
-        Mensagem mensagemSalva = tabela.get(mensagem.getChave());
-        if (!mensagemSalva.getReplicationStatus().contains(mensagem.getRemetente())) {
-            mensagemSalva.getReplicationStatus().add(mensagem.getRemetente());
-            System.out.println("ADICIONADO REMETENTE" +mensagemSalva.getReplicationStatus());
-        }
-        System.out.println("COMO TA DPS" + mensagemSalva.getReplicationStatus());
-        // Verificar se todas as mensagens de replicaçao foram para todos os servidores da lista
-        if (mensagemSalva.getReplicationStatus().size() == NUMERO_SERVIDORES_EXCETO_LIDER) {
-
-            // Enviar a mensagem PUT_OK para o cliente remetente
-            try {
-                Socket clienteSocket =  tabelaSockets.get(tabela.get(mensagem.getChave()).getRemetente());
-                System.out.println(clienteSocket);
-                ObjectOutputStream out = new ObjectOutputStream(clienteSocket.getOutputStream());
-
-                System.out.println("MANDANDO PARA O CLIENTE" + clienteSocket);
-                Mensagem mensagemPutOk = new Mensagem("PUT_OK", mensagem.getChave(), mensagem.getValor(), System.currentTimeMillis(), montarEnderecoServidor());
-                out.writeObject(mensagemPutOk);
-//                clienteSocket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     /**
@@ -151,42 +119,32 @@ public class Servidor {
                     case "PUT":
                         if (servidor.getEhLider()) {
                             inserirMensagem(key, value, timestamp, remetente);
-                            inserirSocketCliente(mensagem.getRemetente(), clienteSocket);
                             replicarRegistro(key, value, timestamp, remetente);
-
+                            Mensagem mensagemEnviada = new Mensagem("PUT_OK", key, value, timestamp, montarEnderecoServidor());
+                            out.writeObject(mensagemEnviada);
                         } else {
-                            encaminharParaLider(mensagem);
+                            encaminharParaLider(mensagem, out);
                         }
                         break;
                     case "GET":
                         requisicaoGET(out, key, value, timestamp);
-                        clienteSocket.close();
                         break;
                     case "REPLICATION":
                         inserirMensagem(key, value, timestamp, remetente);
                         Mensagem mensagemOK = new Mensagem("REPLICATION_OK", key, value,
                                 System.currentTimeMillis(), montarEnderecoServidor());
-                        encaminharParaLider(mensagemOK);
-                        break;
-                    case "REPLICATION_OK":
-                        processarReplicationOK(mensagem);
-                        clienteSocket.close();
+                        out.writeObject(mensagemOK);
                         break;
                 }
+
+                clienteSocket.close();
 
             } catch (IOException | ClassNotFoundException e) {
                 e.printStackTrace();
             }
         }
 
-        private void inserirSocketCliente(String remetente, Socket clienteSocket) throws IOException {
-            if (!tabelaSockets.containsKey(remetente)) {
-                System.out.println("INSERINDO " + clienteSocket+ clienteSocket.getOutputStream()  );
-                tabelaSockets.put(remetente, clienteSocket);
-            } else {
-                System.out.println("Mensagem já existe na tabela. Não será inserida novamente.");
-            }
-        }
+
         private void requisicaoGET(ObjectOutputStream out, String key, String value, long timestamp) throws IOException {
             Long valueTimestamp = null;
             if (servidor.tabela.containsKey(key)) {
@@ -206,36 +164,53 @@ public class Servidor {
 
 
         private void inserirMensagem(String key, String value, long timestamp, String remetente) {
+            System.out.println("INSERINDO NA TABELA: " + remetente);
             tabela.put(key, new Mensagem("PUT", key, value, timestamp, remetente));
         }
 
-        private void replicarRegistro(String key, String value, long timestamp, String remetente) {
+        private boolean replicarRegistro(String key, String value, long timestamp, String remetente) {
             Mensagem mensagemReplicacao = new Mensagem("REPLICATION", key, value, timestamp, remetente);
 
             for (int portaServidor : portasServidores) {
                 try {
                     Socket servidorSocket = new Socket(SERVER_IP_DEFAULT_LOCAL, portaServidor);
+
                     ObjectOutputStream out = new ObjectOutputStream(servidorSocket.getOutputStream());
+                    ObjectInputStream in = new ObjectInputStream(servidorSocket.getInputStream());
+
                     out.writeObject(mensagemReplicacao);
+                    Mensagem mensagem = (Mensagem) in.readObject();
+                    if (mensagem == null || !mensagem.getMetodo().equals("REPLICATION_OK")) {
+                        return false;
+                    }
+                    servidorSocket.close();
                 } catch (IOException e) {
                     e.printStackTrace();
+                } catch (ClassNotFoundException e) {
+                    throw new RuntimeException(e);
                 }
+
             }
-
-
+            return true;
         }
 
 
-        private void encaminharParaLider(Mensagem mensagem) {
+        private void encaminharParaLider(Mensagem mensagem, ObjectOutputStream outCliente) {
             try {
                 Socket liderSocket = new Socket(ipLider, portaLider);
                 ObjectOutputStream out = new ObjectOutputStream(liderSocket.getOutputStream());
+                ObjectInputStream in = new ObjectInputStream(liderSocket.getInputStream());
                 out.writeObject(mensagem);
-//                liderSocket.close();
 
-                System.out.println("ENCAMINHA PARA LIDER " + mensagem.getValor() );
+                Mensagem mensagemVoltaLider = (Mensagem) in.readObject();
+                System.out.println(mensagemVoltaLider.getMetodo());
+                outCliente.writeObject(mensagemVoltaLider);
+                liderSocket.close();
+                System.out.println("ENCAMINHA PARA LIDER " + mensagem.getValor());
             } catch (IOException e) {
                 e.printStackTrace();
+            } catch (ClassNotFoundException e) {
+                throw new RuntimeException(e);
             }
         }
     }
@@ -274,7 +249,6 @@ public class Servidor {
         servidor.iniciar();
 
     }
-
 
 
 }
