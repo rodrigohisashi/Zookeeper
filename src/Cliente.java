@@ -107,9 +107,13 @@ public class Cliente {
             Mensagem mensagem = new Mensagem("PUT", chave, valor, 0L, montarRemetenteCliente(clienteSocket));
             out.writeObject(mensagem);
 
+            // A mensagem que o servidor vai voltar
             Mensagem resposta = (Mensagem) in.readObject();
             if (resposta.getMetodo().equals("PUT_OK")) {
-                System.out.println("DKASDJKAS");
+                System.out.println("PUT_OK key: "+ resposta.getChave() + "value "+ resposta.getValor() + " timestamp "+ resposta.getTimestamp()
+                        +" realizada no servidor ["+ resposta.getRemetente().split(":")[0]+ ":" + resposta.getRemetente().split(":")[1] + "]");
+            } else {
+                System.out.println("OCORREU UM ERRO AO FAZER O PUT");
             }
 
         } catch (IOException e) {
@@ -145,11 +149,16 @@ public class Cliente {
             Mensagem mensagem = new Mensagem("GET", chave, null, ultimoTimestamp, montarRemetenteCliente(clienteSocket));
             out.writeObject(mensagem);
 
-            // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave
+            // Verifica a resposta recebida se for GET_OK printar que foi recebido com sucesso com o valor da chave, ou se não achou o valor da chave
             Mensagem resposta = (Mensagem) in.readObject();
             if (resposta.getMetodo().equals("GET_RESPONSE")) {
                 if (resposta.getValor() != null) {
-                    System.out.println("Valor encontrado: " + resposta.getValor() + ", Timestamp: " + resposta.getTimestamp());
+                    String output = "GET key: " + chave +
+                            " value: " + resposta.getValor() +
+                            " obtido do servidor " + serverIP + ":" + serverPorta +
+                            ", meu timestamp " + System.currentTimeMillis() +
+                            " e do servidor " + resposta.getTimestamp();
+                    System.out.println(output);
                 } else if (resposta.getValor() == null) {
                     System.out.println("Chave " + chave + " não foi encontrada");
                 } else if (resposta.getValor().equals(TRY_OTHER_SERVER_OR_LATER)) {

@@ -16,6 +16,7 @@ public class Servidor {
     private Boolean ehLider;
     private List<Integer> portasServidores;
     private Map<String, Mensagem> tabela = new HashMap<>();
+
     public Servidor(String ip, int porta, String ipLider, int portaLider, List<Integer> portasServidores) {
         this.ip = ip;
         this.porta = porta;
@@ -119,7 +120,9 @@ public class Servidor {
                     case "PUT":
                         if (servidor.getEhLider()) {
                             inserirMensagem(key, value, timestamp, remetente);
+                            System.out.println("Cliente [" + remetente + "] PUT key:[" + key + "] value:[" + value + "].");
                             replicarRegistro(key, value, timestamp, remetente);
+                            System.out.println("");
                             Mensagem mensagemEnviada = new Mensagem("PUT_OK", key, value, timestamp, montarEnderecoServidor());
                             out.writeObject(mensagemEnviada);
                         } else {
@@ -131,6 +134,7 @@ public class Servidor {
                         break;
                     case "REPLICATION":
                         inserirMensagem(key, value, timestamp, remetente);
+                        System.out.println("REPLICATION key:[" + key + "] value:[" + value + "] ts:["+timestamp+"].");
                         Mensagem mensagemOK = new Mensagem("REPLICATION_OK", key, value,
                                 System.currentTimeMillis(), montarEnderecoServidor());
                         out.writeObject(mensagemOK);
@@ -157,6 +161,10 @@ public class Servidor {
                     value = TRY_OTHER_SERVER_OR_LATER;
                 }
             }
+            // Imprimir a mensagem para o console do servidor
+            System.out.println("Cliente [" + servidor.ip + ":" + servidor.porta + "] GET key:[" + key + "] ts:[" + timestamp +
+                    "]. Meu ts é [" + valueTimestamp + "], portanto devolvendo " + (value.equals(TRY_OTHER_SERVER_OR_LATER) ? "erro" : "valor " + value) + ".");
+
             // Enviar resposta para o cliente
             Mensagem resposta = new Mensagem("GET_RESPONSE", key, value, valueTimestamp, servidor.montarEnderecoServidor());
             out.writeObject(resposta);
@@ -164,11 +172,10 @@ public class Servidor {
 
 
         private void inserirMensagem(String key, String value, long timestamp, String remetente) {
-            System.out.println("INSERINDO NA TABELA: " + remetente);
             tabela.put(key, new Mensagem("PUT", key, value, timestamp, remetente));
         }
 
-        private boolean replicarRegistro(String key, String value, long timestamp, String remetente) {
+        private void replicarRegistro(String key, String value, long timestamp, String remetente) {
             Mensagem mensagemReplicacao = new Mensagem("REPLICATION", key, value, timestamp, remetente);
 
             for (int portaServidor : portasServidores) {
@@ -180,8 +187,9 @@ public class Servidor {
 
                     out.writeObject(mensagemReplicacao);
                     Mensagem mensagem = (Mensagem) in.readObject();
+
                     if (mensagem == null || !mensagem.getMetodo().equals("REPLICATION_OK")) {
-                        return false;
+                        System.out.println("ERRO AO REPLICAR");
                     }
                     servidorSocket.close();
                 } catch (IOException e) {
@@ -191,7 +199,6 @@ public class Servidor {
                 }
 
             }
-            return true;
         }
 
 
@@ -201,12 +208,10 @@ public class Servidor {
                 ObjectOutputStream out = new ObjectOutputStream(liderSocket.getOutputStream());
                 ObjectInputStream in = new ObjectInputStream(liderSocket.getInputStream());
                 out.writeObject(mensagem);
-
+                System.out.println("Encaminhando PUT key:[" + mensagem.getChave() + "] value:[" + mensagem.getValor() + "]");
                 Mensagem mensagemVoltaLider = (Mensagem) in.readObject();
-                System.out.println(mensagemVoltaLider.getMetodo());
                 outCliente.writeObject(mensagemVoltaLider);
                 liderSocket.close();
-                System.out.println("ENCAMINHA PARA LIDER " + mensagem.getValor());
             } catch (IOException e) {
                 e.printStackTrace();
             } catch (ClassNotFoundException e) {
