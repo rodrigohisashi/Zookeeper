@@ -156,13 +156,12 @@ public class Cliente {
                     String output = "GET key: " + chave +
                             " value: " + resposta.getValor() +
                             " obtido do servidor " + serverIP + ":" + serverPorta +
-                            ", meu timestamp " + System.currentTimeMillis() +
+                            ", meu timestamp " + ultimoTimestamp +
                             " e do servidor " + resposta.getTimestamp();
                     System.out.println(output);
+                    ultimoTimestamps.put(resposta.getChave(), resposta.getTimestamp());
                 } else if (resposta.getValor() == null) {
                     System.out.println("Chave " + chave + " não foi encontrada");
-                } else if (resposta.getValor().equals(TRY_OTHER_SERVER_OR_LATER)) {
-                    System.out.println("Tente outro server ou mais tarde");
                 }
             }
 

@@ -120,7 +120,7 @@ public class Servidor {
                     case "PUT":
                         if (servidor.getEhLider()) {
                             inserirMensagem(key, value, timestamp, remetente);
-                            System.out.println("Cliente [" + remetente + "] PUT key:[" + key + "] value:[" + value + "].");
+                            System.out.println("Cliente [" + montarClienteEndereco(clienteSocket) + "] PUT key:[" + key + "] value:[" + value + "].");
                             replicarRegistro(key, value, timestamp, remetente);
                             System.out.println("");
                             Mensagem mensagemEnviada = new Mensagem("PUT_OK", key, value, timestamp, montarEnderecoServidor());
@@ -130,7 +130,7 @@ public class Servidor {
                         }
                         break;
                     case "GET":
-                        requisicaoGET(out, key, value, timestamp);
+                        requisicaoGET(out, key, value, mensagem.getTimestamp(), clienteSocket);
                         break;
                     case "REPLICATION":
                         inserirMensagem(key, value, timestamp, remetente);
@@ -148,21 +148,27 @@ public class Servidor {
             }
         }
 
+        private String montarClienteEndereco(Socket clienteSocket) {
+            return clienteSocket.getInetAddress().getHostAddress() + ":" + clienteSocket.getPort();
+        }
 
-        private void requisicaoGET(ObjectOutputStream out, String key, String value, long timestamp) throws IOException {
-            Long valueTimestamp = null;
+
+        private void requisicaoGET(ObjectOutputStream out, String key, String value, long timestamp, Socket socket) throws IOException {
+            Long valueTimestamp = -1L;
             if (servidor.tabela.containsKey(key)) {
                 Mensagem mensagemArmazenada = servidor.tabela.get(key);
                 valueTimestamp = mensagemArmazenada.getTimestamp();
 
-                if (valueTimestamp <= timestamp) {
+                if (valueTimestamp >= timestamp) {
                     value = mensagemArmazenada.getValor();
                 } else {
                     value = TRY_OTHER_SERVER_OR_LATER;
                 }
+            } else {
+                value = null;
             }
             // Imprimir a mensagem para o console do servidor
-            System.out.println("Cliente [" + servidor.ip + ":" + servidor.porta + "] GET key:[" + key + "] ts:[" + timestamp +
+            System.out.println("Cliente [" +montarClienteEndereco(clienteSocket)+ "] GET key:[" + key + "] ts:[" + timestamp +
                     "]. Meu ts é [" + valueTimestamp + "], portanto devolvendo " + (value.equals(TRY_OTHER_SERVER_OR_LATER) ? "erro" : "valor " + value) + ".");
 
             // Enviar resposta para o cliente
