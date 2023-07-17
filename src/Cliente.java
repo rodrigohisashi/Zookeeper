@@ -3,7 +3,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
 
 public class Cliente {
 
@@ -90,10 +89,10 @@ public class Cliente {
     /**
      * Método para enviar o PUT para o servidor assincronamente
      *
-     * @param chave           para ser enviado
-     * @param valor           para ser preenchido
-     * @param serverIP        servidor para ser enviado
-     * @param serverPorta     server porta para ser enviado
+     * @param chave       para ser enviado
+     * @param valor       para ser preenchido
+     * @param serverIP    servidor para ser enviado
+     * @param serverPorta server porta para ser enviado
      */
     private static void enviarPut(String chave, String valor, String serverIP, int serverPorta) {
 
@@ -110,8 +109,9 @@ public class Cliente {
             // A mensagem que o servidor vai voltar
             Mensagem resposta = (Mensagem) in.readObject();
             if (resposta.getMetodo().equals("PUT_OK")) {
-                System.out.println("PUT_OK key: "+ resposta.getChave() + "value "+ resposta.getValor() + " timestamp "+ resposta.getTimestamp()
-                        +" realizada no servidor ["+ resposta.getRemetente().split(":")[0]+ ":" + resposta.getRemetente().split(":")[1] + "]");
+                System.out.println("PUT_OK key: " + resposta.getChave() + "value " + resposta.getValor() + " timestamp " + resposta.getTimestamp()
+                        + " realizada no servidor [" + resposta.getRemetente().split(":")[0] + ":" + resposta.getRemetente().split(":")[1] + "]");
+                ultimoTimestamps.put(chave, resposta.getTimestamp());
             } else {
                 System.out.println("OCORREU UM ERRO AO FAZER O PUT");
             }
@@ -131,9 +131,9 @@ public class Cliente {
     /**
      * Método para enviar o GET para o Servidor
      *
-     * @param chave           chave a ser enviado para procura
-     * @param serverIP        ip do server para ser enviado
-     * @param serverPorta     a porta do server
+     * @param chave       chave a ser enviado para procura
+     * @param serverIP    ip do server para ser enviado
+     * @param serverPorta a porta do server
      */
     private static void enviarGet(String chave, String serverIP, int serverPorta) {
         try {
