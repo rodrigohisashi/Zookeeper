@@ -36,10 +36,12 @@ public class Servidor {
 
     public void iniciar() {
         try {
+            // Cria um novo socket para escutar requisicoes do cliente
             ServerSocket servidorSocket = new ServerSocket(porta);
 
             // Espera conexao dos clientes
             while (true) {
+                // Caso tenha uma nova requisicao é aberta thread para tratá-la
                 Socket clienteSocket = servidorSocket.accept();
                 ClienteHandler clienteHandler = new ClienteHandler(clienteSocket, this);
                 Thread thread1 = new Thread(clienteHandler);
@@ -121,10 +123,8 @@ public class Servidor {
                         if (servidor.getEhLider()) {
                             inserirMensagem(key, value, timestamp, remetente);
                             System.out.println("Cliente [" + montarClienteEndereco(clienteSocket) + "] PUT key:[" + key + "] value:[" + value + "].");
-                            replicarRegistro(key, value, timestamp, remetente);
-                            System.out.println("");
-                            Mensagem mensagemEnviada = new Mensagem("PUT_OK", key, value, timestamp, montarEnderecoServidor());
-                            out.writeObject(mensagemEnviada);
+                            boolean replicouParaTodos = replicarRegistro(key, value, timestamp, remetente);
+                            mandarMensagemPutOK(out, key, value, timestamp, replicouParaTodos);
                         } else {
                             encaminharParaLider(mensagem, out);
                         }
@@ -148,18 +148,29 @@ public class Servidor {
             }
         }
 
+        private void mandarMensagemPutOK(ObjectOutputStream out, String key, String value, long timestamp, boolean replicouParaTodos) throws IOException {
+            if (replicouParaTodos) {
+                Mensagem mensagemEnviada = new Mensagem("PUT_OK", key, value, timestamp, montarEnderecoServidor());
+                out.writeObject(mensagemEnviada);
+            }
+        }
+
         private String montarClienteEndereco(Socket clienteSocket) {
             return clienteSocket.getInetAddress().getHostAddress() + ":" + clienteSocket.getPort();
         }
 
 
         private void requisicaoGET(ObjectOutputStream out, String key, String value, long timestamp, Socket socket) throws IOException {
-            Long valueTimestamp = -1L;
+            Long valueTimestampServidor = -1L;
+
+            // Se contém a chave na tabela faz validações
             if (servidor.tabela.containsKey(key)) {
                 Mensagem mensagemArmazenada = servidor.tabela.get(key);
-                valueTimestamp = mensagemArmazenada.getTimestamp();
+                valueTimestampServidor = mensagemArmazenada.getTimestamp();
 
-                if (valueTimestamp >= timestamp) {
+                // Se o timestamp do servidor associado a mensagem for maior que o timestamp do cliente, devolve a chave
+                // Caso contrário devolve TRY_OTHER_SERVER_OR_LATER
+                if (valueTimestampServidor >= timestamp) {
                     value = mensagemArmazenada.getValor();
                 } else {
                     value = TRY_OTHER_SERVER_OR_LATER;
@@ -169,10 +180,10 @@ public class Servidor {
             }
             // Imprimir a mensagem para o console do servidor
             System.out.println("Cliente [" +montarClienteEndereco(clienteSocket)+ "] GET key:[" + key + "] ts:[" + timestamp +
-                    "]. Meu ts é [" + valueTimestamp + "], portanto devolvendo " + (value.equals(TRY_OTHER_SERVER_OR_LATER) ? "erro" : "valor " + value) + ".");
+                    "]. Meu ts é [" + valueTimestampServidor + "], portanto devolvendo " + (value.equals(TRY_OTHER_SERVER_OR_LATER) ? "erro" : "valor " + value) + ".");
 
             // Enviar resposta para o cliente
-            Mensagem resposta = new Mensagem("GET_RESPONSE", key, value, valueTimestamp, servidor.montarEnderecoServidor());
+            Mensagem resposta = new Mensagem("GET_RESPONSE", key, value, valueTimestampServidor, servidor.montarEnderecoServidor());
             out.writeObject(resposta);
         }
 
@@ -181,9 +192,17 @@ public class Servidor {
             tabela.put(key, new Mensagem("PUT", key, value, timestamp, remetente));
         }
 
-        private void replicarRegistro(String key, String value, long timestamp, String remetente) {
+        /**
+         * Replica a mensagem para os outros servidores
+         * @param key a chave
+         * @param value o valor
+         * @param timestamp o timestamp
+         * @param remetente o remetente
+         * @return true se replicou para todos, false caso contrário
+         */
+        private boolean replicarRegistro(String key, String value, long timestamp, String remetente) {
             Mensagem mensagemReplicacao = new Mensagem("REPLICATION", key, value, timestamp, remetente);
-
+            // Para cada porta do servidor da lista, replica a mensagem para eles inserirem na tabela deles
             for (int portaServidor : portasServidores) {
                 try {
                     Socket servidorSocket = new Socket(SERVER_IP_DEFAULT_LOCAL, portaServidor);
@@ -195,26 +214,28 @@ public class Servidor {
                     Mensagem mensagem = (Mensagem) in.readObject();
 
                     if (mensagem == null || !mensagem.getMetodo().equals("REPLICATION_OK")) {
-                        System.out.println("ERRO AO REPLICAR");
+                        return false;
                     }
                     servidorSocket.close();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
-                } catch (ClassNotFoundException e) {
-                    throw new RuntimeException(e);
+                    return false;
                 }
-
             }
+            return true;
         }
 
 
         private void encaminharParaLider(Mensagem mensagem, ObjectOutputStream outCliente) {
             try {
+                // Abre o socket para mandar mensagem para o lider
                 Socket liderSocket = new Socket(ipLider, portaLider);
                 ObjectOutputStream out = new ObjectOutputStream(liderSocket.getOutputStream());
                 ObjectInputStream in = new ObjectInputStream(liderSocket.getInputStream());
+                // Manda a mensagem para o líder
                 out.writeObject(mensagem);
                 System.out.println("Encaminhando PUT key:[" + mensagem.getChave() + "] value:[" + mensagem.getValor() + "]");
+                // Espera a mensagem do líder e o encaminha de volta para o cliente
                 Mensagem mensagemVoltaLider = (Mensagem) in.readObject();
                 outCliente.writeObject(mensagemVoltaLider);
                 liderSocket.close();
@@ -227,6 +248,7 @@ public class Servidor {
     }
 
     public static void main(String[] args) {
+        // Adiciona portas padrão do servidor já conhecidos
         List<Integer> portas = new ArrayList<>();
         portas.add(10097);
         portas.add(10099);
@@ -239,14 +261,17 @@ public class Servidor {
             serverIP = SERVER_IP_DEFAULT_LOCAL;
         }
 
+        // Insere a porta do Servidor
         Integer serverPorta = inserirPortaServidor(scanner);
 
+        // Define o IP do líder
         System.out.print("Digite o IP do servidor Líder (Enter para default - 127.0.0.1): ");
         String serverIpLider = scanner.nextLine().trim();
         if (serverIpLider.isEmpty()) {
             serverIpLider = SERVER_IP_DEFAULT_LOCAL;
         }
 
+        // Define a porta do líder
         System.out.print("Digite a porta do servidor Líder: ");
         int portaLider = Integer.parseInt(scanner.nextLine());
 

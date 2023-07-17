@@ -14,6 +14,9 @@ public class Cliente {
     private static Map<String, Long> ultimoTimestamps = new HashMap<>();
     public static final String TRY_OTHER_SERVER_OR_LATER = "TRY_OTHER_SERVER_OR_LATER";
 
+    /**
+     * Inicia o Cliente
+     */
     public void iniciar() {
         preencherInfoServidores();
         Thread thread1 = new Thread();
@@ -43,6 +46,7 @@ public class Cliente {
                 continue;
             }
             switch (escolha) {
+                // CASO PUT
                 case 1:
                     System.out.print("Digite a chave: ");
                     String chavePut = scanner.nextLine();
@@ -54,6 +58,8 @@ public class Cliente {
                     thread1 = new Thread(() -> enviarPut(chavePut, valorPut, serverIPs.get(indiceServidorPut), serverPorts.get(indiceServidorPut)));
                     thread1.start();
                     break;
+
+                // CASO GET
                 case 2:
                     System.out.print("Digite a chave: ");
                     String chaveGet = scanner.nextLine();
@@ -74,14 +80,21 @@ public class Cliente {
     private void preencherInfoServidores() {
         Scanner scanner = new Scanner(System.in);
 
+        // Pega as informações de cada Servidor e porta o cliente fazer requisição
         for (int i = 0; i < SERVER_PORTS_DEFAULT.length; i++) {
             System.out.print("Digite o IP do " + (i + 1) + "° servidor (Enter para default - 127.0.0.1): ");
             String serverIP = scanner.nextLine().trim();
-            if (serverIP.isEmpty() || serverIP == null) {
+            if (serverIP.isEmpty()) {
                 serverIP = SERVER_IP_DEFAULT_LOCAL;
             }
             serverIPs.add(serverIP);
-            serverPorts.add(SERVER_PORTS_DEFAULT[i]);
+            System.out.print("Digite a porta do " + (i + 1) + "° servidor (Enter para default - " + SERVER_PORTS_DEFAULT[i] + ") -");
+            String portaServer = (scanner.nextLine().trim());
+            int intPortaServer = Integer.parseInt(portaServer);
+            if (portaServer.isEmpty()) {
+                intPortaServer = SERVER_PORTS_DEFAULT[i];
+            }
+            serverPorts.add(intPortaServer);
         }
     }
 
