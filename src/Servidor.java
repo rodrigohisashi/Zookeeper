@@ -133,8 +133,8 @@ public class Servidor {
                         requisicaoGET(out, key, value, mensagem.getTimestamp(), clienteSocket);
                         break;
                     case "REPLICATION":
-                        inserirMensagem(key, value, timestamp, remetente);
-                        System.out.println("REPLICATION key:[" + key + "] value:[" + value + "] ts:["+timestamp+"].");
+                        inserirMensagem(key, value, mensagem.getTimestamp(), remetente);
+                        System.out.println("REPLICATION key:[" + key + "] value:[" + value + "] ts:["+mensagem.getTimestamp()+"].");
                         Mensagem mensagemOK = new Mensagem("REPLICATION_OK", key, value,
                                 System.currentTimeMillis(), montarEnderecoServidor());
                         out.writeObject(mensagemOK);
@@ -178,13 +178,21 @@ public class Servidor {
             } else {
                 value = null;
             }
+
+            setarMensagemValue(value);
             // Imprimir a mensagem para o console do servidor
             System.out.println("Cliente [" +montarClienteEndereco(clienteSocket)+ "] GET key:[" + key + "] ts:[" + timestamp +
-                    "]. Meu ts é [" + valueTimestampServidor + "], portanto devolvendo " + (value.equals(TRY_OTHER_SERVER_OR_LATER) ? "erro" : "valor " + value) + ".");
+                    "]. Meu ts é [" + valueTimestampServidor + "], portanto devolvendo " + "valor: " + value + ".");
 
             // Enviar resposta para o cliente
             Mensagem resposta = new Mensagem("GET_RESPONSE", key, value, valueTimestampServidor, servidor.montarEnderecoServidor());
             out.writeObject(resposta);
+        }
+
+        private void setarMensagemValue(String value) {
+            if (value == null) {
+                value = "CHAVE NAO ENCONTRADA";
+            }
         }
 
 
@@ -209,6 +217,9 @@ public class Servidor {
 
                     ObjectOutputStream out = new ObjectOutputStream(servidorSocket.getOutputStream());
                     ObjectInputStream in = new ObjectInputStream(servidorSocket.getInputStream());
+
+                    // Aguarda 5 segundos antes de enviar a mensagem
+                    Thread.sleep(10000);
 
                     out.writeObject(mensagemReplicacao);
                     Mensagem mensagem = (Mensagem) in.readObject();

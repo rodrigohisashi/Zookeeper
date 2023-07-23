@@ -90,9 +90,11 @@ public class Cliente {
             serverIPs.add(serverIP);
             System.out.print("Digite a porta do " + (i + 1) + "° servidor (Enter para default - " + SERVER_PORTS_DEFAULT[i] + ") -");
             String portaServer = (scanner.nextLine().trim());
-            int intPortaServer = Integer.parseInt(portaServer);
+            int intPortaServer;
             if (portaServer.isEmpty()) {
                 intPortaServer = SERVER_PORTS_DEFAULT[i];
+            } else {
+                intPortaServer = Integer.parseInt(portaServer);
             }
             serverPorts.add(intPortaServer);
         }
