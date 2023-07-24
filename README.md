@@ -26,13 +26,6 @@ Para executar o sistema, siga as seguintes etapas:
 
 4. **Observações**: O sistema foi desenvolvido de forma simplificada e não aborda todos os aspectos de um sistema distribuído completo. Para uma utilização em produção, seriam necessários ajustes e considerações adicionais.
 
-## Contato
-
-Em caso de dúvidas ou problemas, entre em contato com o autor do projeto:
-
-[Seu Nome]
-[Seu Email]
-
 ## Licença
 
 Este projeto está licenciado sob a [licença do MIT](https://opensource.org/licenses/MIT). Consulte o arquivo LICENSE para obter mais informações sobre a licença.
