@@ -12,7 +12,7 @@ O Sistema Distribuído de Armazenamento de Chave-Valor é composto por 3 servido
 
 ## Implementação
 
-O sistema foi implementado em Java, utilizando TCP como protocolo da camada de transporte para a comunicação entre os servidores e os clientes. A replicação dos dados entre os servidores é realizada de forma síncrona para garantir a consistência dos dados em todos os servidores.
+O sistema foi implementado em Java, utilizando TCP como protocolo da camada de transporte para a comunicação entre os servidores e os clientes. A replicação dos dados entre os servidores é realizada de forma síncrona para garantir a consistência dos dados em todos os servidores..
 
 ## Executando o Sistema
 
